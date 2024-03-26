@@ -1,12 +1,12 @@
-## Deploying AWS Linux szervers with Ansible
-------------------------------------------------------------------------------
+## Deploying AWS Linux servers with Ansible
+-------------------------------------------
 
 - Requires Ansible 1.x
 - Expects CentOS/RHEL/Fedora hosts
 
 
 ### Linux servers
----------------------------------------------
+-----------------
 
 ![Alt text](images/aws.png "AWS")
 
@@ -16,7 +16,7 @@ RedHat, CentOS, Fedora, Debian, Ubuntu ...etc.
 
 
 ### Ansible
-------------------------------------
+-----------
 
 ![Alt text](images/ansible.png "AWS")
 
