@@ -1,0 +1,62 @@
+# AWS playbook
+---
+
+- hosts: localhost
+  connection: local
+  gather_facts: False
+
+  vars:
+    key_name: aws-2024             # Key used for SSH
+    region: eu-central-1           # Region may affect response and pricing
+    image: ami-06e68b07d21e2f2af   # Fedora-Cloud-Base-39-1.5.x86_64-hvm-eu-central-1-gp3-0
+    id: "example testing"
+    instance_type: t2.micro        # Choose instance type, check AWS for pricing
+    # vpc_id: vpc-ac013bc7
+    sec_group: "aws-2024-sg"
+
+  tasks:
+    - name: "Provisioning EC2 instances"
+      block:
+
+      - name: "Create security group"
+        amazon.aws.ec2_security_group:
+          name: "{{ sec_group }}"
+          description: "Security group for app"
+          region: "{{ region }}"
+          rules:                                # allows ssh on port 22
+            - proto: tcp
+              ports:
+                - 22
+              cidr_ip: 0.0.0.0/0
+              rule_desc: allow all on ssh port
+
+      - name: "Start an instance with a public IP address"
+        amazon.aws.ec2_instance:
+          name: "public-compute-instance"
+          key_name: "{{ key_name }}"
+          # vpc_subnet_id: "{{ vpc_id }}"
+          instance_type: "{{ instance_type }}"
+          security_group: "{{ sec_group }}"
+          region: "{{ region }}"
+          network:
+            assign_public_ip: true
+          image_id: "{{ image }}"
+          tags:
+            Environment: Testing
+
+      # Always require the 'create_ec2' tag to provision EC2 instance
+      tags: ['never', 'create_ec2'] 
+
+    - name: "Facts"
+      block: # this block prints out instance data
+
+      - name: "Get instances facts"
+        ec2_instance_info:
+          region: "{{ region }}"
+        register: result
+
+      - name: "Instances ID"
+        debug:
+          msg: "ID: {{ item.instance_id }} - State: {{ item.state.name }} - Public DNS: {{ item.public_dns_name }}"
+        loop: "{{ result.instances }}"
+      tags: always

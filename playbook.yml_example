@@ -1,0 +1,208 @@
+# AWS playbook
+---
+
+#
+# Example:
+#      https://medium.com/@a_tsai5/creating-an-ec2-instance-using-ansible-764cf70015f6
+#
+#
+# Process Steps:
+# 1. Prepare AWS Account
+# ----------------------
+#    If you have an IAM user with an Access/Secret Access key and EC2 permissions, then you can skip this step and start installing the required software on your local computer.
+#    Creating an IAM user.
+#
+#
+#
+# 2. Install the required local software
+# --------------------------------------
+#    ~# sudo apt install python         # install python
+#    ~#  sudo apt install python-pip     # install pip
+#    ~#  pip install boto boto3 ansible  # install boto, boto3, and ansible
+#
+#
+#
+# 3. Setup Non Ansible Local Files — Project Directory, SSH Keys
+# --------------------------------------------------------------
+#    Create Project Directory:
+#    1. Create an 'ansible_start' folder with 'group_vars/all/' subdirectory
+#       mkdir -p ansible_start/group_vars/all/
+#
+#    2. Go into 'ansible_start'
+#       cd ansible_start
+#
+#    3. Create a 'playbook.yml' file in ansible_start directory
+#       touch playbook.yml
+#
+#    Generate SSH keys:
+#       1. This creates a public (.pub) and private key in the ~/.ssh/ directory
+#          ssh-keygen -t rsa -b 4096 -f ~/.ssh/my_aws
+#          Generating public/private rsa key pair.
+#          Enter passphrase (empty for no passphrase):  # Can be left blank
+#
+#       2. Ensure private key is not publicly viewable
+#          chmod 400 ~/.ssh/my_aws
+#
+#
+#
+# 4. Setup Ansible Vault (2 Methods)
+# ----------------------------------
+#    Method 1: Manually enter password
+#            Create an Ansible vault called pass.yml in the group_vars/all/ directory with the following command:
+#            # 1. Create an ansible vault
+#            ansible-vault create group_vars/all/pass.yml
+#
+#            # 2. There's a prompt for a password, it's needed for playbook execution/edit
+#            New Vault password:
+#            Confirm New Vault password:
+#
+#            With this method, you will be prompted for a password every time playbooks are executed or pass.yml is edited.
+#
+#   Method 2: Automate password access
+#           Though less secure, pass.yml (your ansible vault) can be created with an accompanying password file.
+#           This is referenced when executing playbooks and editing pass.yml so you no longer need to manually enter the password.
+#           # 1. Create a hashed password file vault.pass in the root directory
+#                openssl rand -base64 2048 > vault.pass
+#
+#          # 2. Create an ansible vault. 'vault.pass' is referenced with '--vault-password-file' option
+#               ansible-vault create group_vars/all/pass.yml --vault-password-file vault.pass
+#
+#          With this method, --vault-password-file must now always be used when running the playbook or editing pass.yml, for example:
+#               # Editing 'pass.yaml'
+#               ansible-vault edit group_vars/all/pass.yml --vault-password-file vault.pass
+#
+#   Add AWS Access/Secret to Ansible Vault:
+#
+#      Edit pass.yml to include your AWS access key and secret access key:
+#      # 1. Edit the vault with the 'ansible-vault edit' command
+#
+#      # 1.a. Manual password entry
+#         ansible-vault edit group_vars/all/pass.yml 
+#         Vault password:
+#
+#      # 1.b Automate password entry
+#         ansible-vault edit group_vars/all/pass.yml --vault-password-file vault.pass
+#
+#      # 2. This opens up the 'vim' editor, press 'i' or 'a' to edit, then 'esc' ':wq' to save and exit
+#      # Add this text in using your own access and secret key
+#      ec2_access_key: AAAAAAAAAAAAAABBBBBBBBBBBB                                      
+#      ec2_secret_key: afjdfadgf$fgajk5ragesfjgjsfdbtirhf
+#
+#
+#
+# 5. Setup Ansible playbook
+# -------------------------
+# AWS playbook into file: playbook.yml
+#  see below.
+#
+#
+#
+# 6. Run Ansible to generate EC2 instances
+# ----------------------------------------
+#    # Run 'ansible' to provision an EC2 instance with 'playbook.yml' config
+#       ~# ansible-playbook playbook.yml --tags create_ec2 --vault-password-file vault.pass
+#
+#    Go to the AWS console and you should see a new instance coming up with a status of “Pending”.
+#
+#
+#
+# 7. Connect to EC2 instance via SSH
+# ----------------------------------
+#    Select your instance on the AWS console and click on the “Connect” button. The public DNS can be found here, and will be used for SSH-ing.
+#
+#    SSH into the new instance using this command:
+#      ~# ssh -i "~/.ssh/my_aws" ec2-user@ec2-xx-xx-xxx-xxx.ap-southeast-2.compute.amazonaws.com
+#
+#
+# Congratulations, you’ve now accessed your provisioned instance!
+#
+
+
+
+
+
+
+
+# ********************************************************************************************************************
+#
+# Run 'ansible' to provision an EC2 instance with 'playbook.yml' config:
+#   ~# ansible-playbook playbook.yml --tags create_ec2 --vault-password-file vault.pass
+#
+#
+# filename: playbook.yml
+#
+
+- hosts: localhost
+  connection: local
+  gather_facts: False
+
+  vars:
+    key_name: my_aws             # Key used for SSH
+    region: ap-southeast-2       # Region may affect response and pricing
+    image: ami-06cd706b6bacee637 # look in ec2 > ami (filter owner alias: amazon) or amis of manually launched instances
+    id: "example testing"
+    instance_type: t2.nano       # Choose instance type, check AWS for pricing
+    # vpc_id: subnet-012345
+    sec_group: "test-security-group"
+
+  tasks:
+    - name: Provisioning EC2 instances
+      block:
+
+      - name: Create security group
+        amazon.aws.ec2_security_group:
+          name: "{{ sec_group }}"
+          description: "Sec group for app"
+          region: "{{ region }}"
+          aws_access_key: "{{ec2_access_key}}"  # From vault as defined
+          aws_secret_key: "{{ec2_secret_key}}"  # From vault as defined
+          rules:                                # allows ssh on port 22
+            - proto: tcp
+              ports:
+                - 22
+              cidr_ip: 0.0.0.0/0
+              rule_desc: allow all on ssh port
+
+      - name: Amazon EC2 | Create Key Pair      # Create key pair for ssh
+        amazon.aws.ec2_key:
+          name: "{{ key_name }}"
+          region: "{{ region }}"
+          aws_access_key: "{{ec2_access_key}}"  # From vault as defined
+          aws_secret_key: "{{ec2_secret_key}}"  # From vault as defined
+          key_material: "{{ item }}"
+        with_file: /path/to/my_aws.pub
+
+      - name: Start an instance with a public IP address
+        amazon.aws.ec2_instance:
+          name: "public-compute-instance"
+          key_name: "{{ key_name }}"
+          # vpc_subnet_id: "{{ vpc_id }}"
+          instance_type: "{{ instance_type }}"
+          security_group: "{{ sec_group }}"
+          aws_access_key: "{{ ec2_access_key }}"
+          aws_secret_key: "{{ ec2_secret_key }}"
+          region: "{{ region }}"
+          network:
+            assign_public_ip: true
+          image_id: "{{ image }}"
+          tags:
+            Environment: Testing
+
+      # Always require the 'create_ec2' tag to provision EC2 instance
+      tags: ['never', 'create_ec2'] 
+
+    - name: Facts
+      block: # this block prints out instance data
+
+      - name: Get instances facts
+        ec2_instance_info:
+          aws_access_key: "{{ ec2_access_key }}"
+          aws_secret_key: "{{ ec2_secret_key }}"
+          region: "{{ region }}"
+        register: result
+
+      - name: Instances ID
+        debug:
+          msg: "ID: {{ item.instance_id }} - State: {{ item.state.name }} - Public DNS: {{ item.public_dns_name }}"
+        loop: "{{ result.instances }}"
+      tags: always
